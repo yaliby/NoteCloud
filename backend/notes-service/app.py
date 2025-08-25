@@ -12,6 +12,11 @@ app.config["MONGO_URI"] = os.environ.get("MONGO_URI", "mongodb://localhost:27017
 mongo = PyMongo(app)
 users_collection = mongo.db.UsersInfo
 
+
+def normalize_email(s: str) -> str:
+    return (s or "").strip().lower()
+
+
 # המרת ObjectId ל-string בתשובות
 def serialize_user(user):
     user["_id"] = str(user["_id"])
@@ -25,7 +30,7 @@ def index():
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    email = data.get("email")
+    email = normalize_email(data.get('email'))
     password = data.get("password")
     name = data.get("name")
 
@@ -83,6 +88,30 @@ def get_notes(user_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify({"notes": user.get("notes", [])})
+
+# התחברות משתמש קיים
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    email = normalize_email(data.get('email'))
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "Missing fields"}), 400
+
+    user = users_collection.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # בדיקת התאמת סיסמה
+    if not bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
+        return jsonify({"error": "Incorrect password"}), 401
+
+    return jsonify({
+        "message": "Login successful",
+        "user_id": str(user["_id"]),
+        "name": user["name"]
+    }), 200
 
 # הרצה
 if __name__ == "__main__":
